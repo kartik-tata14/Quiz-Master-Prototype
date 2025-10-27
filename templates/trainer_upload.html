@@ -1,0 +1,36 @@
+<!-- templates/trainer_upload.html -->
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Upload Questions</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-light">
+    <div class="container py-4">
+        <h3>Upload Questions for <code>{{ test['test_code'] }}</code> - {{ test['name'] }}</h3>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, msg in messages %}
+        <div class="alert alert-{{ category }}">{{ msg }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+        <form method="post" enctype="multipart/form-data">
+            <div class="mb-3">
+                <label class="form-label">CSV File</label>
+                <input type="file" name="csv_file" accept=".csv" class="form-control" required>
+                <div class="form-text">CSV columns: Question,Option1,Option2,Option3,Option4,Correct (use 1;3 for multi)
+                </div>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-primary">Upload</button>
+                <a class="btn btn-outline-secondary" href="{{ url_for('trainer_index') }}">Cancel</a>
+            </div>
+        </form>
+    </div>
+</body>
+
+</html>

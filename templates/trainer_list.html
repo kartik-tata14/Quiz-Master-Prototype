@@ -52,6 +52,8 @@
                             style="display:inline" onsubmit="return confirm('Delete this test?');">
                             <button class="btn btn-sm btn-danger">Delete</button>
                         </form>
+                        <a class="btn btn-sm btn-success" href="{{ url_for('trainer_upload', test_id=t['id']) }}">Upload
+                            Questions</a>
                     </td>
                 </tr>
                 {% else %}

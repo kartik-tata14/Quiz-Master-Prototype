@@ -1,0 +1,89 @@
+<!-- templates/quiz.html -->
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Quiz - {{ test_name }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .timer {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+    </style>
+</head>
+
+<body class="bg-light">
+    <div class="container py-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4>{{ test_name }}</h4>
+            <div class="timer text-danger" id="countdown">Loading...</div>
+        </div>
+
+        <form id="quizForm" method="post" action="{{ url_for('quiz_submit', test_code=test_code) }}">
+            {% for q in questions %}
+            <div class="card mb-3">
+                <div class="card-body">
+                    <p><strong>Q{{ loop.index }}.</strong> {{ q.text }}</p>
+                    {% if q.is_multiple %}
+                    {% for opt in q.options %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="q_{{ q.id }}" value="{{ loop.index }}"
+                            id="q{{ q.id }}_{{ loop.index }}">
+                        <label class="form-check-label" for="q{{ q.id }}_{{ loop.index }}">{{ opt }}</label>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    {% for opt in q.options %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="q_{{ q.id }}" value="{{ loop.index }}"
+                            id="q{{ q.id }}_{{ loop.index }}">
+                        <label class="form-check-label" for="q{{ q.id }}_{{ loop.index }}">{{ opt }}</label>
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Submit Answers</button>
+                <a class="btn btn-link" href="{{ url_for('login') }}">Exit</a>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        // Timer and auto-submit
+        const duration = {{ duration_seconds }}; // seconds
+        let remaining = duration;
+        const display = document.getElementById('countdown');
+        const form = document.getElementById('quizForm');
+        function formatTime(s) {
+            const m = Math.floor(s / 60).toString().padStart(2, '0');
+            const sec = (s % 60).toString().padStart(2, '0');
+            return `${m}:${sec}`;
+        }
+        display.textContent = formatTime(remaining);
+        const interval = setInterval(() => {
+            remaining -= 1;
+            if (remaining <= 0) {
+                clearInterval(interval);
+                display.textContent = "00:00";
+                // notify and auto-submit
+                alert("Time over for the current quiz");
+                // create a hidden input to indicate timeout
+                const inp = document.createElement('input');
+                inp.type = 'hidden';
+                inp.name = 'auto_submitted';
+                inp.value = '1';
+                form.appendChild(inp);
+                form.submit();
+            } else {
+                display.textContent = formatTime(remaining);
+            }
+        }, 1000);
+    </script>
+</body>
+
+</html>

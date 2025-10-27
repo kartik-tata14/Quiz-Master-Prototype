@@ -1,0 +1,16 @@
+Question,Option1,Option2,Option3,Option4,Correct
+What is the capital of France?,Berlin,Madrid,Paris,Rome,3
+Which language is primarily used for Android app development?,Java,Swift,Kotlin,Ruby,3
+Select the prime numbers,4,5,6,7,2;4
+Which planet is known as the Red Planet?,Earth,Venus,Mars,Jupiter,3
+Which HTML tag is used for a level 1 heading?,<h2>,<h1>,<header>,<title>,2
+Choose the data types that are immutable in Python.,list,tuple,dict,str,2;4
+What does SQL stand for?,Structured Query Language,Simple Query Language,Structured Question Language,Sequential Query Language,1
+Select HTTP methods used to retrieve data.,GET,POST,PUT,DELETE,1
+Which of the following are relational databases?,MongoDB,PostgreSQL,Cassandra,MySQL,2;4
+What is 7 multiplied by 8?,54,56,64,58,2
+Which CSS property controls text color?,background-color,font-size,color,text-align,3
+Select Linux commands for listing directory contents.,ls,cd,mkdir,dir,1;4
+In Git which command creates a new branch?,git commit,git branch,git merge,git pull,2
+Which are HTTP status codes for successful responses?,200,301,404,201,1;4
+What is the chemical symbol for Gold?,Au,Ag,Gd,Go,1
