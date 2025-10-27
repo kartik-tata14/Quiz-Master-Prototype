@@ -35,6 +35,13 @@
                 <input name="duration" type="number" min="0" class="form-control" value="{{ test['duration_minutes'] }}"
                     required>
             </div>
+            <div class="mb-3">
+                <label class="form-label">Total Trainees</label>
+                <input name="total_trainees" type="number" min="0" class="form-control"
+                    value="{{ test.get('total_trainees', 0) }}">
+                <div class="form-text">Enter the total number of trainees expected for this test (used for participation
+                    stats).</div>
+            </div>
 
             <div class="mb-3">
                 <label class="form-label">Test Code (readonly)</label>

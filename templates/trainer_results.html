@@ -1,0 +1,324 @@
+<!-- templates/trainer_results.html -->
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Results Analysis</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/styles.css') }}" rel="stylesheet">
+    <style>
+        body {
+            background: #f6f8fa;
+            color: #222;
+        }
+
+        .page-title {
+            font-weight: 600;
+            letter-spacing: -0.2px;
+        }
+
+        .small-muted {
+            color: #6c757d;
+        }
+
+        .stat-tile {
+            min-width: 120px;
+        }
+
+        .chart-card {
+            border-radius: 10px;
+            box-shadow: 0 6px 20px rgba(18, 38, 63, 0.06);
+        }
+
+        .chart-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .chart-legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .chart-wrap {
+            padding: 14px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* remove forcing large min-heights */
+        .chart-card {
+            min-height: auto;
+        }
+
+        /* constrain canvas containers instead of forcing page height */
+        .chart-canvas {
+            width: 100%;
+            max-height: 360px;
+            /* prevents runaway vertical growth */
+            height: auto;
+            display: block;
+        }
+
+        /* smaller devices */
+        @media (max-width: 767px) {
+            .chart-canvas {
+                max-height: 260px;
+            }
+        }
+
+        /* card content overflow: allow inner scroll if chart is larger */
+        .chart-wrap {
+            overflow: hidden;
+        }
+
+        .chart-scroll {
+            overflow: auto;
+        }
+    </style>
+
+</head>
+
+<body>
+    <div class="container py-4">
+        <div class="d-flex align-items-start justify-content-between mb-3">
+            <div>
+                <h3 class="page-title mb-1">Results Analysis</h3>
+                <div class="small-muted">Test: <strong id="testName"></strong></div>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+                <button id="exportBtn" class="btn btn-export btn-sm">Export Summary CSV</button>
+                <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('trainer_index') }}">Back to Dashboard</a>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-md-3 col-sm-6">
+                <div class="card p-3 chart-card stat-tile">
+                    <div class="text-muted small">Total Trainees</div>
+                    <div class="h4 mt-1" id="statTotal">0</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="card p-3 chart-card stat-tile">
+                    <div class="text-muted small">Participants</div>
+                    <div class="h4 mt-1" id="statParticipants">0</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="card p-3 chart-card stat-tile">
+                    <div class="text-muted small">Non Participants</div>
+                    <div class="h4 mt-1" id="statNon">0</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="card p-3 chart-card stat-tile">
+                    <div class="text-muted small">Total Attempts</div>
+                    <div class="h4 mt-1" id="statAttempts">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-lg-5">
+                <div class="card chart-card">
+                    <div class="chart-wrap">
+                        <div class="chart-header mb-2">
+                            <div>
+                                <h6 class="mb-0">Quiz Participation</h6>
+                                <div class="small-muted">Participants vs Non participants</div>
+                            </div>
+                            <div class="text-end small-muted">Counts</div>
+                        </div>
+                        <canvas id="participationChart" class="chart-canvas chart-scroll"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-7">
+                <div class="card chart-card">
+                    <div class="chart-wrap">
+                        <div class="chart-header mb-2">
+                            <div>
+                                <h6 class="mb-0">Quiz Result Distribution</h6>
+                                <div class="small-muted">Percentage of trainees by score bands</div>
+                            </div>
+                            <div id="pieLegend" class="small-muted"></div>
+                        </div>
+                        <canvas id="resultPie" class="chart-canvas chart-scroll"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card chart-card">
+                    <div class="chart-wrap">
+                        <div class="chart-header mb-2">
+                            <div>
+                                <h6 class="mb-0">Questionwise Analysis</h6>
+                                <div class="small-muted">Correct vs Wrong per question</div>
+                            </div>
+                            <div class="small-muted">Counts</div>
+                        </div>
+                        <canvas id="questionBar" class="chart-canvas chart-scroll"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        const chartData = JSON.parse(`{{ chart_data | safe }}`);
+
+        // Fill summary tiles
+        document.getElementById('testName').textContent = `${chartData.test.code} — ${chartData.test.name} (Total: ${chartData.test.total_trainees})`;
+        const participants = chartData.participation.values[0] || 0;
+        const nonParticipants = chartData.participation.values[1] || 0;
+        document.getElementById('statTotal').textContent = chartData.test.total_trainees || 0;
+        document.getElementById('statParticipants').textContent = participants;
+        document.getElementById('statNon').textContent = nonParticipants;
+
+        // Compute total attempts for tile (sum of correct+wrong across questions)
+        const totalAttempts = chartData.question_analysis.correct.reduce((s, v) => s + v, 0)
+            + chartData.question_analysis.wrong.reduce((s, v) => s + v, 0);
+        document.getElementById('statAttempts').textContent = totalAttempts;
+
+        // PARTICIPATION CHART (horizontal)
+        (function () {
+            const ctx = document.getElementById('participationChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: chartData.participation.labels,
+                    datasets: [{
+                        label: 'Count',
+                        data: chartData.participation.values,
+                        backgroundColor: ['#4e79a7', '#f28e2b'],
+                        borderRadius: 8,
+                        barThickness: 18
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { beginAtZero: true, ticks: { precision: 0 } },
+                        y: { ticks: { font: { size: 12 } } }
+                    },
+                    plugins: { legend: { display: false }, tooltip: { enabled: true } }
+                }
+            });
+        })();
+
+        // RESULT PIE
+        (function () {
+            const ctx = document.getElementById('resultPie').getContext('2d');
+            const colors = ['#2ca02c', '#4e79a7', '#fcbf49', '#e15759'];
+            const pie = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: chartData.result_dist.labels,
+                    datasets: [{
+                        data: chartData.result_dist.values,
+                        backgroundColor: colors,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { enabled: true }
+                    }
+                }
+            });
+
+            // custom legend
+            const legendEl = document.getElementById('pieLegend');
+            const labels = chartData.result_dist.labels;
+            legendEl.innerHTML = labels.map((lab, i) => {
+                const val = chartData.result_dist.values[i] || 0;
+                return `<span style="display:inline-flex;align-items:center;margin-left:10px;">
+                  <span class="chart-legend-dot" style="background:${colors[i]}"></span>
+                  <small style="color:#495057">${lab} <strong style="margin-left:6px;">${val}</strong></small>
+                </span>`;
+            }).join('');
+        })();
+
+        // QUESTIONWISE BAR (grouped)
+        (function () {
+            const ctx = document.getElementById('questionBar').getContext('2d');
+            const labels = chartData.question_analysis.labels.map((t, i) => {
+                // truncate long question labels for better readability on x-axis
+                const max = 45;
+                return t.length > max ? t.slice(0, max - 1) + '…' : t;
+            });
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Correct', data: chartData.question_analysis.correct, backgroundColor: '#2ca02c', borderRadius: 4 },
+                        { label: 'Wrong', data: chartData.question_analysis.wrong, backgroundColor: '#e15759', borderRadius: 4 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        x: { stacked: false, ticks: { maxRotation: 45, minRotation: 0 } },
+                        y: { beginAtZero: true, ticks: { precision: 0 } }
+                    },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: { enabled: true }
+                    }
+                }
+            });
+        })();
+
+        // Export CSV: simple client-side builder for the summary + question stats
+        document.getElementById('exportBtn').addEventListener('click', function () {
+            const rows = [];
+            // header
+            rows.push(['Test Code', chartData.test.code]);
+            rows.push(['Test Name', chartData.test.name]);
+            rows.push(['Total Trainees', chartData.test.total_trainees]);
+            rows.push(['Participants', chartData.participation.values[0] || 0]);
+            rows.push(['Non Participants', chartData.participation.values[1] || 0]);
+            rows.push([]);
+            rows.push(['Question', 'Correct', 'Wrong']);
+            const qlabels = chartData.question_analysis.labels;
+            const correct = chartData.question_analysis.correct;
+            const wrong = chartData.question_analysis.wrong;
+            for (let i = 0; i < qlabels.length; i++) {
+                rows.push([qlabels[i].replace(/[\r\n]+/g, ' '), correct[i] || 0, wrong[i] || 0]);
+            }
+            // convert to CSV string
+            const csvContent = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const a = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            a.href = url;
+            a.download = `${chartData.test.code}_results_summary.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+    </script>
+</body>
+
+</html>

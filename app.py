@@ -2,6 +2,7 @@ import os
 import re
 import csv
 import io
+import math
 import json
 import random
 import sqlite3
@@ -193,14 +194,18 @@ def trainer_edit(test_id):
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT * FROM tests WHERE id = ?", (test_id,))
-    test = cur.fetchone()
-    if not test:
+    row = cur.fetchone()
+    if not row:
         flash("Test not found.", "danger")
         return redirect(url_for("trainer_index"))
+    # convert sqlite3.Row to plain dict so templates can use .get() safely
+    test = dict(row)
+
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         description = request.form.get("description", "").strip()
         duration = request.form.get("duration", "0").strip()
+        total_trainees = request.form.get("total_trainees", "0").strip()
         try:
             duration_int = int(duration)
             if duration_int < 0:
@@ -208,16 +213,25 @@ def trainer_edit(test_id):
         except ValueError:
             flash("Duration must be a non-negative integer (minutes).", "danger")
             return redirect(url_for("trainer_edit", test_id=test_id))
+        try:
+            total_trainees_int = int(total_trainees)
+            if total_trainees_int < 0:
+                raise ValueError
+        except ValueError:
+            flash("Total trainees must be a non-negative integer.", "danger")
+            return redirect(url_for("trainer_edit", test_id=test_id))
         now = datetime.utcnow().isoformat()
         try:
             cur.execute("""
                 UPDATE tests
-                SET name = ?, description = ?, duration_minutes = ?, updated_at = ?
+                SET name = ?, description = ?, duration_minutes = ?, total_trainees = ?, updated_at = ?
                 WHERE id = ?
-            """, (name, description, duration_int, now, test_id))
+            """, (name, description, duration_int, total_trainees_int, now, test_id))
             conn.commit()
             flash("Test updated successfully.", "success")
             return redirect(url_for("trainer_index"))
+        except Exception:
+            flash("Error updating test.", "danger")
         finally:
             pass
     return render_template("trainer_edit.html", test=test)
@@ -363,6 +377,108 @@ def trainer_questions_delete_bulk():
     conn.commit()
     flash(f"Deleted {cur.rowcount} question(s).", "success")
     return redirect(url_for("trainer_questions", test_id=test_id))
+
+
+@app.route("/trainer/results/<int:test_id>")
+def trainer_results(test_id):
+    # trainer auth
+    redirect_resp = trainer_login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # load test metadata including total_trainees
+    cur.execute("SELECT id, test_code, name, total_trainees FROM tests WHERE id = ?", (test_id,))
+    test = cur.fetchone()
+    if not test:
+        flash("Test not found.", "danger")
+        return redirect(url_for("trainer_index"))
+
+    # PARTICIPATION
+    cur.execute("SELECT COUNT(1) as cnt FROM results WHERE test_id = ?", (test_id,))
+    participants_row = cur.fetchone()
+    participants = participants_row["cnt"] if participants_row else 0
+    total_trainees = test["total_trainees"] or 0
+    non_participants = max(total_trainees - participants, 0)
+
+    # QUESTIONWISE ANALYSIS
+    # fetch questions for this test
+    cur.execute("SELECT id, question_text, correct FROM questions WHERE test_id = ? ORDER BY id ASC", (test_id,))
+    qrows = cur.fetchall()
+    q_ids = [q["id"] for q in qrows]
+    q_texts = [q["question_text"] for q in qrows]
+    correct_map = {q["id"]: q["correct"] for q in qrows}
+
+    # initialize counts
+    q_total_attempts = {qid: 0 for qid in q_ids}
+    q_correct_counts = {qid: 0 for qid in q_ids}
+    # fetch all results for this test
+    cur.execute("SELECT raw_answers FROM results WHERE test_id = ?", (test_id,))
+    result_rows = cur.fetchall()
+    for r in result_rows:
+        raw = r["raw_answers"]
+        try:
+            answers = json.loads(raw)
+        except Exception:
+            answers = {}
+        for qid in q_ids:
+            s_qid = str(qid)
+            ans = answers.get(s_qid, "")
+            if ans:
+                q_total_attempts[qid] += 1
+                # compare answer set to correct set
+                correct = correct_map.get(qid, "")
+                if correct:
+                    # sets of strings like {'1','3'}
+                    if set(ans.split(";")) == set(correct.split(";")):
+                        q_correct_counts[qid] += 1
+
+    # Build arrays for chart (aligned with q_texts)
+    question_labels = q_texts
+    correct_counts = [q_correct_counts[qid] for qid in q_ids]
+    wrong_counts = [q_total_attempts[qid] - q_correct_counts[qid] for qid in q_ids]
+
+    # RESULT DISTRIBUTION
+    # bins: 100%, >=75% and <100, >=50% and <75, <50%
+    cur.execute("SELECT score, total FROM results WHERE test_id = ?", (test_id,))
+    score_rows = cur.fetchall()
+    bins = {"100": 0, "75plus": 0, "50to75": 0, "below50": 0}
+    for sr in score_rows:
+        score = sr["score"]
+        total = sr["total"] or 1
+        pct = (score / total) * 100.0
+        if math.isclose(pct, 100.0, rel_tol=1e-9):
+            bins["100"] += 1
+        elif pct >= 75.0:
+            bins["75plus"] += 1
+        elif pct >= 50.0:
+            bins["50to75"] += 1
+        else:
+            bins["below50"] += 1
+
+    # prepare JSON data for template
+    chart_data = {
+        "participation": {
+            "labels": ["Participants", "Non Participants"],
+            "values": [participants, non_participants]
+        },
+        "question_analysis": {
+            "labels": question_labels,
+            "correct": correct_counts,
+            "wrong": wrong_counts
+        },
+        "result_dist": {
+            "labels": ["100%", ">=75%", "50-75%", "<50%"],
+            "values": [bins["100"], bins["75plus"], bins["50to75"], bins["below50"]]
+        },
+        "test": {"id": test["id"], "code": test["test_code"], "name": test["name"], "total_trainees": total_trainees}
+    }
+
+    conn.close()
+    return render_template("trainer_results.html", chart_data=json.dumps(chart_data))
+
 
 
 # ---------------- Quiz flow for trainees: start, submit, results
