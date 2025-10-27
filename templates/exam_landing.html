@@ -1,0 +1,30 @@
+<!-- templates/exam_landing.html -->
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Exam Landing</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8 col-lg-6">
+                <div class="card shadow-sm">
+                    <div class="card-body p-4 text-center">
+                        <h3 class="mb-3">Welcome to the Test</h3>
+                        <p class="lead mb-1"><strong>Test Name</strong> : {{ test_name }}</p>
+                        <p class="mb-3"><strong>Test Code</strong> : {{ test_code }}</p>
+                        <p class="text-muted">Trainer will start the quiz when ready.</p>
+                        <a href="{{ url_for('login') }}" class="btn btn-outline-secondary mt-3">Back to Login</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
