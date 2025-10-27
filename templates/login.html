@@ -16,7 +16,7 @@
             <div class="col-md-7 col-lg-6">
                 <div class="card shadow-sm">
                     <div class="card-body p-4">
-                        <h3 class="mb-3 text-center">Join Quiz</h3>
+                        <h3 class="mb-3 text-center">Quiz Master - Join Online Quiz</h3>
 
                         {% with messages = get_flashed_messages(with_categories=true) %}
                         {% if messages %}
@@ -29,7 +29,7 @@
                         <form id="loginForm" method="post" novalidate>
                             <input type="hidden" name="action" value="trainee_login">
                             <div class="mb-3">
-                                <label for="test_code" class="form-label">6 Digit Test ID</label>
+                                <label for="test_code" class="form-label">Standard ID</label>
                                 <input type="text" class="form-control form-control-lg" id="test_code" name="test_code"
                                     maxlength="6" inputmode="numeric" autocomplete="off" required>
                                 <div class="invalid-feedback" id="fieldFeedback"></div>
