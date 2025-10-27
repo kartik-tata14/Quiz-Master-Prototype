@@ -1,0 +1,129 @@
+<!-- templates/trainer_questions.html -->
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Questions for {{ test['test_code'] }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-light">
+    <div class="container py-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h4>Questions for <code>{{ test['test_code'] }}</code></h4>
+                <div class="text-muted">{{ test['name'] }}</div>
+            </div>
+            <div class="d-flex gap-2">
+                <a class="btn btn-outline-secondary" href="{{ url_for('trainer_index') }}">Back to Tests</a>
+                <a class="btn btn-success" href="{{ url_for('trainer_upload', test_id=test['id']) }}">Upload CSV</a>
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, msg in messages %}
+        <div class="alert alert-{{ category }}">{{ msg }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        {% if questions %}
+        <form id="bulkDeleteForm" method="post" action="{{ url_for('trainer_questions_delete_bulk') }}">
+            <input type="hidden" name="test_id" value="{{ test['id'] }}">
+            <div class="mb-3 d-flex justify-content-between align-items-center">
+                <div>
+                    <button id="bulkDeleteBtn" type="submit" class="btn btn-danger btn-sm"
+                        onclick="return confirmBulkDelete();">Delete Selected</button>
+                    <button id="selectAllBtn" type="button" class="btn btn-outline-secondary btn-sm ms-2"
+                        onclick="toggleSelectAll();">Select All</button>
+                </div>
+                <div>
+                    <a class="btn btn-success btn-sm" href="{{ url_for('trainer_upload', test_id=test['id']) }}">Upload
+                        CSV</a>
+                </div>
+            </div>
+
+            {% if questions %}
+            <div class="list-group">
+                {% for q in questions %}
+                <div class="list-group-item">
+                    <div class="d-flex w-100 justify-content-between align-items-start">
+                        <div class="form-check">
+                            <input class="form-check-input question-checkbox" type="checkbox" name="selected_q"
+                                value="{{ q['id'] }}" id="chk{{ q['id'] }}">
+                        </div>
+                        <div class="flex-grow-1 ms-2">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">Q{{ loop.index }}: {{ q['question_text'] }}</h6>
+                                <small class="text-muted">ID: {{ q['id'] }}</small>
+                            </div>
+                            <p class="mb-1">
+                                <strong>Options:</strong>
+                                1) {{ q['option1'] }} &nbsp; 2) {{ q['option2'] }} &nbsp; 3) {{ q['option3'] }} &nbsp;
+                                4) {{ q['option4'] }}
+                            </p>
+                            <p class="mb-1"><strong>Correct:</strong> {{ q['correct'] }} {% if q['is_multiple']
+                                %}(multi){% else %}(single){% endif %}</p>
+                        </div>
+                        <div class="ms-3">
+                            <form method="post" action="{{ url_for('trainer_question_delete', question_id=q['id']) }}"
+                                onsubmit="return confirmDeleteSingle(event, {{ q['id'] }});">
+                                <button class="btn btn-sm btn-danger">Delete</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="alert alert-info">No questions uploaded yet for this test.</div>
+            {% endif %}
+        </form>
+
+        <script>
+            // Toggle select all / deselect all
+            function toggleSelectAll() {
+                const checkboxes = document.querySelectorAll('.question-checkbox');
+                const anyUnchecked = Array.from(checkboxes).some(cb => !cb.checked);
+                checkboxes.forEach(cb => cb.checked = anyUnchecked);
+                document.getElementById('selectAllBtn').textContent = anyUnchecked ? 'Deselect All' : 'Select All';
+            }
+
+            // Confirm before bulk delete
+            function confirmBulkDelete() {
+                const selected = document.querySelectorAll('.question-checkbox:checked');
+                if (selected.length === 0) {
+                    alert('No questions selected for deletion.');
+                    return false;
+                }
+                return confirm(`Delete ${selected.length} selected question(s)? This action cannot be undone.`);
+            }
+
+            // Confirm before single delete (keeps existing behavior)
+            function confirmDeleteSingle(e, qid) {
+                const ok = confirm("Delete question ID " + qid + " ? This action cannot be undone.");
+                if (!ok) { e.preventDefault(); return false; }
+                return true;
+            }
+        </script>
+        {% else %}
+        <div class="alert alert-info">No questions uploaded yet for this test.</div>
+        {% endif %}
+    </div>
+
+    <script>
+        function confirmDelete(e, qid) {
+            const ok = confirm("Delete question ID " + qid + " ? This action cannot be undone.");
+            if (!ok) {
+                e.preventDefault();
+                return false;
+            }
+            return true;
+        }
+    </script>
+</body>
+
+</html>

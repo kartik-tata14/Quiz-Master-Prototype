@@ -294,6 +294,77 @@ def trainer_upload(test_id):
             return redirect(url_for("trainer_upload", test_id=test_id))
     return render_template("trainer_upload.html", test=test)
 
+# View questions for a test
+@app.route("/trainer/questions/<int:test_id>")
+def trainer_questions(test_id):
+    redirect_resp = trainer_login_required()
+    if redirect_resp:
+        return redirect_resp
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, test_code, name FROM tests WHERE id = ?", (test_id,))
+    test = cur.fetchone()
+    if not test:
+        flash("Test not found.", "danger")
+        return redirect(url_for("trainer_index"))
+    cur.execute("""
+        SELECT id, question_text, option1, option2, option3, option4, correct, is_multiple
+        FROM questions
+        WHERE test_id = ?
+        ORDER BY id ASC
+    """, (test_id,))
+    questions = cur.fetchall()
+    return render_template("trainer_questions.html", test=test, questions=questions)
+
+# Delete a single question (POST)
+@app.route("/trainer/question/delete/<int:question_id>", methods=["POST"])
+def trainer_question_delete(question_id):
+    redirect_resp = trainer_login_required()
+    if redirect_resp:
+        return redirect_resp
+    conn = get_db_connection()
+    cur = conn.cursor()
+    # find test_id to return back to questions list
+    cur.execute("SELECT test_id FROM questions WHERE id = ?", (question_id,))
+    row = cur.fetchone()
+    if not row:
+        flash("Question not found.", "danger")
+        return redirect(url_for("trainer_index"))
+    test_id = row["test_id"]
+    cur.execute("DELETE FROM questions WHERE id = ?", (question_id,))
+    conn.commit()
+    flash("Question deleted.", "success")
+    return redirect(url_for("trainer_questions", test_id=test_id))
+
+@app.route("/trainer/questions/delete_bulk", methods=["POST"])
+def trainer_questions_delete_bulk():
+    redirect_resp = trainer_login_required()
+    if redirect_resp:
+        return redirect_resp
+    # 'test_id' is used to redirect back; 'selected_q' are question ids from the form
+    test_id = request.form.get("test_id")
+    selected = request.form.getlist("selected_q")
+    if not test_id:
+        flash("Missing test reference.", "danger")
+        return redirect(url_for("trainer_index"))
+    if not selected:
+        flash("No questions selected for deletion.", "warning")
+        return redirect(url_for("trainer_questions", test_id=test_id))
+    # validate ids are integers
+    try:
+        ids = [int(x) for x in selected]
+    except ValueError:
+        flash("Invalid question selection.", "danger")
+        return redirect(url_for("trainer_questions", test_id=test_id))
+    conn = get_db_connection()
+    cur = conn.cursor()
+    placeholders = ",".join("?" for _ in ids)
+    cur.execute(f"DELETE FROM questions WHERE id IN ({placeholders})", tuple(ids))
+    conn.commit()
+    flash(f"Deleted {cur.rowcount} question(s).", "success")
+    return redirect(url_for("trainer_questions", test_id=test_id))
+
+
 # ---------------- Quiz flow for trainees: start, submit, results
 @app.route("/quiz/start/<test_code>", methods=["GET"])
 def quiz_start(test_code):

@@ -54,6 +54,9 @@
                         </form>
                         <a class="btn btn-sm btn-success" href="{{ url_for('trainer_upload', test_id=t['id']) }}">Upload
                             Questions</a>
+                        <a class="btn btn-sm btn-info" href="{{ url_for('trainer_questions', test_id=t['id']) }}">View
+                            Questions</a>
+
                     </td>
                 </tr>
                 {% else %}
