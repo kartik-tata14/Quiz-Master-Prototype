@@ -1,0 +1,81 @@
+<!-- templates/trainer_create.html -->
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Create Test</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-light">
+    <div class="container py-4">
+        <h3>Create New Test</h3>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, msg in messages %}
+        <div class="alert alert-{{ category }}">{{ msg }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <form method="post">
+            <div class="mb-3">
+                <label class="form-label">Test Title</label>
+                <input name="name" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Description</label>
+                <textarea name="description" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Duration (minutes)</label>
+                <input name="duration" type="number" min="0" class="form-control" value="0" required>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Test Code</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="code_mode" id="auto" value="auto" checked>
+                    <label class="form-check-label" for="auto">Auto-generate 6-digit code</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="code_mode" id="manual" value="manual">
+                    <label class="form-check-label" for="manual">Enter manual 6-digit code</label>
+                </div>
+                <input name="manual_code" id="manual_code" class="form-control mt-2" placeholder="123456" maxlength="6"
+                    pattern="\d{6}">
+                <div class="form-text">Manual code must be exactly 6 numeric digits if selected.</div>
+            </div>
+
+            <input type="hidden" name="key" value="{{ request.args.get('key') }}">
+            <div class="d-flex gap-2">
+                <button class="btn btn-primary">Create Test</button>
+                <a class="btn btn-outline-secondary"
+                    href="{{ url_for('trainer_index', key=request.args.get('key')) }}">Cancel</a>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const manualInput = document.getElementById('manual_code');
+            const manualRadio = document.getElementById('manual');
+            const autoRadio = document.getElementById('auto');
+
+            function toggleManual() {
+                manualInput.disabled = !manualRadio.checked;
+            }
+            manualRadio.addEventListener('change', toggleManual);
+            autoRadio.addEventListener('change', toggleManual);
+            toggleManual();
+            manualInput.addEventListener('input', () => {
+                manualInput.value = manualInput.value.replace(/\D/g, '').slice(0, 6);
+            });
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,55 @@
+<!-- templates/trainer_edit.html -->
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Edit Test</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="bg-light">
+    <div class="container py-4">
+        <h3>Edit Test - <code>{{ test['test_code'] }}</code></h3>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, msg in messages %}
+        <div class="alert alert-{{ category }}">{{ msg }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <form method="post">
+            <div class="mb-3">
+                <label class="form-label">Test Title</label>
+                <input name="name" class="form-control" required value="{{ test['name'] }}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Description</label>
+                <textarea name="description" class="form-control" rows="3">{{ test['description'] }}</textarea>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Duration (minutes)</label>
+                <input name="duration" type="number" min="0" class="form-control" value="{{ test['duration_minutes'] }}"
+                    required>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Test Code (readonly)</label>
+                <input class="form-control" value="{{ test['test_code'] }}" readonly>
+                <div class="form-text">Test code cannot be changed here. Delete and re-create to change code.</div>
+            </div>
+
+            <input type="hidden" name="key" value="{{ request.args.get('key') }}">
+            <div class="d-flex gap-2">
+                <button class="btn btn-primary">Save Changes</button>
+                <a class="btn btn-outline-secondary"
+                    href="{{ url_for('trainer_index', key=request.args.get('key')) }}">Cancel</a>
+            </div>
+        </form>
+    </div>
+</body>
+
+</html>
