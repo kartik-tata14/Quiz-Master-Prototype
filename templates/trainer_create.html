@@ -38,17 +38,24 @@
             <div class="mb-3">
                 <label class="form-label">Test Code</label>
                 <div class="form-check">
-                    <input class="form-check-input" type="radio" name="code_mode" id="auto" value="auto" checked>
-                    <label class="form-check-label" for="auto">Auto-generate 6-digit code</label>
+                    <input class="form-check-input" type="radio" name="code_mode" id="codeAuto" value="auto" checked
+                        onchange="toggleManualCode()">
+                    <label class="form-check-label" for="codeAuto">Auto-generate 6-character code</label>
                 </div>
                 <div class="form-check">
-                    <input class="form-check-input" type="radio" name="code_mode" id="manual" value="manual">
-                    <label class="form-check-label" for="manual">Enter manual 6-digit code</label>
+                    <input class="form-check-input" type="radio" name="code_mode" id="codeManual" value="manual"
+                        onchange="toggleManualCode()">
+                    <label class="form-check-label" for="codeManual">Enter manual 6-character code</label>
                 </div>
-                <label class="form-label">Manual Test Code (optional)</label>
-                <input type="text" name="manual_code" class="form-control" maxlength="6" placeholder="e.g. A1B2C3">
-                <div class="form-text">Must be exactly 6 alphanumeric characters (A–Z, 0–9)</div>
+
+                <div class="mt-2">
+                    <label class="form-label">Manual Test Code (optional)</label>
+                    <input type="text" name="manual_code" id="manualCodeInput" class="form-control" maxlength="6"
+                        placeholder="e.g. A1B2C3" disabled>
+                    <div class="form-text">Must be exactly 6 alphanumeric characters (A–Z, 0–9)</div>
+                </div>
             </div>
+
 
             <input type="hidden" name="key" value="{{ request.args.get('key') }}">
             <div class="d-flex gap-2">
@@ -60,21 +67,13 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const manualInput = document.getElementById('manual_code');
-            const manualRadio = document.getElementById('manual');
-            const autoRadio = document.getElementById('auto');
+        function toggleManualCode() {
+            const manualInput = document.getElementById("manualCodeInput");
+            const manualRadio = document.getElementById("codeManual");
+            manualInput.disabled = !manualRadio.checked;
+        }
 
-            function toggleManual() {
-                manualInput.disabled = !manualRadio.checked;
-            }
-            manualRadio.addEventListener('change', toggleManual);
-            autoRadio.addEventListener('change', toggleManual);
-            toggleManual();
-            manualInput.addEventListener('input', () => {
-                manualInput.value = manualInput.value.replace(/\D/g, '').slice(0, 6);
-            });
-        });
+        window.addEventListener("DOMContentLoaded", toggleManualCode);
     </script>
 </body>
 
