@@ -6,7 +6,7 @@ import math
 import json
 import random
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 import string
 from flask import (
     Flask, g, render_template, request, redirect, url_for, flash, session, abort
@@ -471,7 +471,11 @@ def trainer_results(test_id):
         return redirect(url_for("trainer_index"))
 
     # Participation counts
-    cur.execute("SELECT COUNT(1) as cnt FROM results WHERE test_id = ?", (test_id,))
+    cur.execute("""
+    SELECT COUNT(1) as cnt
+    FROM results
+    WHERE test_id = ? AND COALESCE(raw_answers,'') <> ''
+    """, (test_id,))
     participants_row = cur.fetchone()
     participants = participants_row["cnt"] if participants_row else 0
     total_trainees = test["total_trainees"] or 0
@@ -528,31 +532,16 @@ def trainer_results(test_id):
     # Fetch individual attempts with trainee info where possible
     # Prefer joining trainees on trainee_id; fall back to trainee_emp_id stored in results.
     # This query uses LEFT JOIN; if columns don't exist it will still work (SQLite will ignore missing columns)
-    try:
-        cur.execute("""
-            SELECT r.id, r.attempted_at, r.score, r.total,
-                   COALESCE(t.emp_id, r.trainee_emp_id) AS emp_id,
-                   COALESCE(t.name, r.trainee_name) AS trainee_name
-            FROM results r
-            LEFT JOIN trainees t ON r.trainee_id = t.id
-            WHERE r.test_id = ?
-            ORDER BY r.attempted_at DESC
-        """, (test_id,))
-        attempts = cur.fetchall()
-        attempts = [dict(a) for a in attempts]
-    except Exception:
-        # Fallback if schema is different: select basic fields and try to display whatever exists
-        cur.execute("SELECT id, attempted_at, score, total, raw_answers FROM results WHERE test_id = ? ORDER BY attempted_at DESC", (test_id,))
-        attempts = []
-        for r in cur.fetchall():
-            attempts.append({
-                "id": r["id"],
-                "attempted_at": r["attempted_at"],
-                "score": r["score"],
-                "total": r["total"],
-                "emp_id": None,
-                "trainee_name": None
-            })
+    cur.execute("""
+    SELECT r.id, r.attempted_at, r.score, r.total,
+           COALESCE(t.emp_id, r.trainee_emp_id) AS emp_id,
+           COALESCE(t.name, r.trainee_name) AS trainee_name
+    FROM results r
+    LEFT JOIN trainees t ON r.trainee_id = t.id
+    WHERE r.test_id = ? AND COALESCE(r.raw_answers,'') <> ''
+    ORDER BY r.attempted_at DESC
+    """, (test_id,))
+    attempts = [dict(a) for a in cur.fetchall()]
 
     # Prepare chart_data as before
     chart_data = {
@@ -642,12 +631,15 @@ def quiz_submit(test_code):
         return redirect(url_for("login"))
     test_id = sq["test_id"]
     question_ids = sq["question_ids"]
+
+    #building answers and score
     conn = get_db_connection()
     cur = conn.cursor()
     placeholders = ",".join("?" for _ in question_ids)
     cur.execute(f"SELECT id, correct FROM questions WHERE id IN ({placeholders})", tuple(question_ids))
     rows = cur.fetchall()
     correct_map = {r["id"]: r["correct"] for r in rows}
+    
     score = 0
     total = len(question_ids)
     raw_answers = {}
@@ -660,23 +652,45 @@ def quiz_submit(test_code):
         if vals_norm and correct_ans:
             if set(vals_norm.split(";")) == set(correct_ans.split(";")):
                 score += 1
-    now = datetime.utcnow().isoformat()
-    cur.execute("""
-        INSERT INTO results (test_id, attempted_at, score, total, raw_answers)
-        VALUES (?, ?, ?, ?, ?)
-    """, (test_id, now, score, total, json.dumps(raw_answers)))
-    conn.commit()
-    session.pop("current_quiz", None)
+
+    # do not insert empty submissions
+    if not any(v for v in raw_answers.values()):
+        flash("No answers submitted. Please answer at least one question.", "warning")
+        return redirect(url_for("quiz_start", test_code=test_code))        
+    
     trainee = session.get("trainee")
     trainee_id = trainee["id"] if trainee else None
     trainee_emp = trainee["emp_id"] if trainee else None
     trainee_name = trainee["name"] if trainee else None
 
+    # avoid duplicate recent inserts from accidental double submit
+    if trainee_id is not None:
+        cur.execute("""
+            SELECT id FROM results
+            WHERE test_id = ? AND trainee_id = ? ORDER BY attempted_at DESC LIMIT 1
+        """, (test_id, trainee_id))
+        last = cur.fetchone()
+    if last:
+        # optional: check timestamp difference and skip if too recent (e.g., <5 seconds)
+        try:
+            last_ts = datetime.fromisoformat(last["attempted_at"])
+        except Exception:
+            last_ts = None
+        if last_ts and (datetime.utcnow() - last_ts) < timedelta(seconds=5):
+            flash("Submission already received.", "info")
+            conn.close()
+            return redirect(url_for("trainer_results", test_id=test_id))
+    now = datetime.utcnow().isoformat()
     cur.execute("""
-    INSERT INTO results (test_id, attempted_at, score, total, raw_answers, trainee_id, trainee_emp_id, trainee_name)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-""", (test_id, now, score, total, json.dumps(raw_answers), trainee_id, trainee_emp, trainee_name))
+        INSERT INTO results (test_id, attempted_at, score, total, raw_answers, trainee_id, trainee_emp_id, trainee_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (test_id, now, score, total, json.dumps(raw_answers), trainee_id, trainee_emp, trainee_name))
     conn.commit()
+    conn.close()
+
+    # clear session quiz state and use PRG to avoid re-post on refresh
+    session.pop("current_quiz", None)
+
     return render_template("quiz_result.html", score=score, total=total, test_code=test_code)
 
 # ---------------- Admin utility: simple DB migration if tables missing
