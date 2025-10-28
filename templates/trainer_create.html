@@ -45,9 +45,9 @@
                     <input class="form-check-input" type="radio" name="code_mode" id="manual" value="manual">
                     <label class="form-check-label" for="manual">Enter manual 6-digit code</label>
                 </div>
-                <input name="manual_code" id="manual_code" class="form-control mt-2" placeholder="123456" maxlength="6"
-                    pattern="\d{6}">
-                <div class="form-text">Manual code must be exactly 6 numeric digits if selected.</div>
+                <label class="form-label">Manual Test Code (optional)</label>
+                <input type="text" name="manual_code" class="form-control" maxlength="6" placeholder="e.g. A1B2C3">
+                <div class="form-text">Must be exactly 6 alphanumeric characters (A–Z, 0–9)</div>
             </div>
 
             <input type="hidden" name="key" value="{{ request.args.get('key') }}">

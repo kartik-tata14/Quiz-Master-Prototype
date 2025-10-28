@@ -7,6 +7,7 @@ import json
 import random
 import sqlite3
 from datetime import datetime
+import string
 from flask import (
     Flask, g, render_template, request, redirect, url_for, flash, session, abort
 )
@@ -37,16 +38,19 @@ def close_db_connection(exception):
 
 # ---------------- Utilities
 def is_valid_test_code(code):
-    return bool(re.fullmatch(r"\d{6}", code))
+    return bool(re.fullmatch(r"[A-Za-z0-9]{6}", code))
 
 def generate_unique_code(conn):
     cur = conn.cursor()
+    chars = string.ascii_uppercase + string.digits  # A-Z, 0-9
     for _ in range(2000):
-        cand = f"{random.randint(0, 999999):06d}"
+        cand = ''.join(random.choices(chars, k=6))
         cur.execute("SELECT 1 FROM tests WHERE test_code = ?", (cand,))
         if not cur.fetchone():
             return cand
     raise RuntimeError("Unable to generate unique test code")
+
+
 
 # ---------------- Routes: Trainee login + exam landing
 @app.route("/", methods=["GET", "POST"])
@@ -56,10 +60,8 @@ def login():
         code = request.form.get("test_code", "").strip()
         if not code:
             error = "Please enter the 6 digit Unique Test ID."
-        elif not code.isdigit():
-            error = "Unique Test ID must be numeric."
-        elif len(code) != 6:
-            error = "Unique Test ID must be exactly 6 digits."
+        elif not re.fullmatch(r"[A-Za-z0-9]{6}", code):
+            error = "Test ID must be exactly 6 alphanumeric characters."
         elif not is_valid_test_code(code):
             error = "Invalid Test ID format."
         else:
@@ -162,7 +164,7 @@ def trainer_create():
 
         if code_mode == "manual":
             if not manual_code or not is_valid_test_code(manual_code):
-                flash("Manual Test Code must be exactly 6 numeric digits.", "danger")
+                flash("Manual Test Code must be exactly 6 alphanumeric characters (A-Z, 0-9).", "danger")
                 return redirect(url_for("trainer_create"))
             code = manual_code
         else:
