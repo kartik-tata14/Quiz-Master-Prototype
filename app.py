@@ -77,7 +77,7 @@ def login():
             flash(error, "danger")
     return render_template("login.html")
 
-@app.route("/exam/<test_code>")
+@app.route("/exam/<test_code>", methods=["GET", "POST"])
 def exam_landing(test_code):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -86,17 +86,36 @@ def exam_landing(test_code):
     if not test:
         flash("Test not found.", "danger")
         return redirect(url_for("login"))
-    test_id = test["id"]
-    cur.execute("SELECT COUNT(1) as cnt FROM questions WHERE test_id = ?", (test_id,))
-    qcount_row = cur.fetchone()
-    qcount = qcount_row["cnt"] if qcount_row else 0
-    has_questions = qcount > 0
-    return render_template(
-        "exam_landing.html",
-        test_code=test_code,
-        test_name=test["name"],
-        has_questions=has_questions
-    )
+
+    # POST: trainee submitted Employee ID
+    if request.method == "POST":
+        emp_id = (request.form.get("emp_id") or "").strip()
+        if not emp_id:
+            flash("Please enter your Employee ID.", "danger")
+            return redirect(url_for("exam_landing", test_code=test_code))
+
+        # Case-insensitive lookup; change to strict match if needed
+        cur.execute("SELECT id, emp_id, name FROM trainees WHERE LOWER(emp_id) = LOWER(?)", (emp_id,))
+        trainee = cur.fetchone()
+        if not trainee:
+            flash("Employee ID not registered", "danger")
+            # re-render landing so trainee can try again
+            return render_template("exam_landing.html",
+                                   test_code=test_code,
+                                   test_name=test["name"],
+                                   duration_minutes=test["duration_minutes"],
+                                   emp_id=emp_id)
+
+        # Trainee found — store in session and proceed to quiz start
+        session['trainee'] = {"id": trainee["id"], "emp_id": trainee["emp_id"], "name": trainee["name"]}
+        return redirect(url_for("quiz_start", test_code=test_code))
+
+    # GET: render landing + emp_id form
+    return render_template("exam_landing.html",
+                           test_code=test_code,
+                           test_name=test["name"],
+                           duration_minutes=test["duration_minutes"])
+
 
 # ---------------- Trainer auth inline (from login page)
 @app.route("/trainer/login", methods=["POST"])
@@ -310,6 +329,60 @@ def trainer_upload(test_id):
             return redirect(url_for("trainer_upload", test_id=test_id))
     return render_template("trainer_upload.html", test=test)
 
+# Trainer: list and add trainees for entire system (or extend to be test-specific later)
+@app.route("/trainer/trainees")
+def trainer_trainees():
+    redirect_resp = trainer_login_required()
+    if redirect_resp:
+        return redirect_resp
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, emp_id, name, created_at FROM trainees ORDER BY created_at DESC")
+    rows = cur.fetchall()
+    trainees = [dict(r) for r in rows]
+    return render_template("trainer_trainees.html", trainees=trainees)
+
+@app.route("/trainer/trainees/add", methods=["GET", "POST"])
+def trainer_trainees_add():
+    redirect_resp = trainer_login_required()
+    if redirect_resp:
+        return redirect_resp
+    if request.method == "POST":
+        emp_id = (request.form.get("emp_id") or "").strip()
+        name = (request.form.get("name") or "").strip()
+        if not emp_id or not name:
+            flash("Both Employee ID and name are required.", "danger")
+            return redirect(url_for("trainer_trainees_add"))
+        # Validate alphanumeric emp id (adjust regex if you allow other chars)
+        if not re.fullmatch(r"[A-Za-z0-9]+", emp_id):
+            flash("Employee ID must be alphanumeric.", "danger")
+            return redirect(url_for("trainer_trainees_add"))
+        conn = get_db_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute("INSERT INTO trainees (emp_id, name, created_at) VALUES (?, ?, ?)",
+                        (emp_id, name, datetime.utcnow().isoformat()))
+            conn.commit()
+            flash("Trainee added.", "success")
+            return redirect(url_for("trainer_trainees"))
+        except sqlite3.IntegrityError:
+            flash("Employee ID already exists.", "danger")
+            return redirect(url_for("trainer_trainees_add"))
+    return render_template("trainer_trainees_add.html")
+
+@app.route("/trainer/trainees/delete/<int:trainee_id>", methods=["POST"])
+def trainer_trainees_delete(trainee_id):
+    redirect_resp = trainer_login_required()
+    if redirect_resp:
+        return redirect_resp
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM trainees WHERE id = ?", (trainee_id,))
+    conn.commit()
+    flash("Trainee removed.", "success")
+    return redirect(url_for("trainer_trainees"))
+
+
 # View questions for a test
 @app.route("/trainer/questions/<int:test_id>")
 def trainer_questions(test_id):
@@ -383,7 +456,6 @@ def trainer_questions_delete_bulk():
 
 @app.route("/trainer/results/<int:test_id>")
 def trainer_results(test_id):
-    # trainer auth
     redirect_resp = trainer_login_required()
     if redirect_resp:
         return redirect_resp
@@ -391,32 +463,30 @@ def trainer_results(test_id):
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # load test metadata including total_trainees
+    # Load test
     cur.execute("SELECT id, test_code, name, total_trainees FROM tests WHERE id = ?", (test_id,))
     test = cur.fetchone()
     if not test:
         flash("Test not found.", "danger")
         return redirect(url_for("trainer_index"))
 
-    # PARTICIPATION
+    # Participation counts
     cur.execute("SELECT COUNT(1) as cnt FROM results WHERE test_id = ?", (test_id,))
     participants_row = cur.fetchone()
     participants = participants_row["cnt"] if participants_row else 0
     total_trainees = test["total_trainees"] or 0
     non_participants = max(total_trainees - participants, 0)
 
-    # QUESTIONWISE ANALYSIS
-    # fetch questions for this test
+    # Questionwise analysis
     cur.execute("SELECT id, question_text, correct FROM questions WHERE test_id = ? ORDER BY id ASC", (test_id,))
     qrows = cur.fetchall()
     q_ids = [q["id"] for q in qrows]
     q_texts = [q["question_text"] for q in qrows]
     correct_map = {q["id"]: q["correct"] for q in qrows}
 
-    # initialize counts
     q_total_attempts = {qid: 0 for qid in q_ids}
     q_correct_counts = {qid: 0 for qid in q_ids}
-    # fetch all results for this test
+
     cur.execute("SELECT raw_answers FROM results WHERE test_id = ?", (test_id,))
     result_rows = cur.fetchall()
     for r in result_rows:
@@ -430,20 +500,15 @@ def trainer_results(test_id):
             ans = answers.get(s_qid, "")
             if ans:
                 q_total_attempts[qid] += 1
-                # compare answer set to correct set
                 correct = correct_map.get(qid, "")
-                if correct:
-                    # sets of strings like {'1','3'}
-                    if set(ans.split(";")) == set(correct.split(";")):
-                        q_correct_counts[qid] += 1
+                if correct and set(ans.split(";")) == set(correct.split(";")):
+                    q_correct_counts[qid] += 1
 
-    # Build arrays for chart (aligned with q_texts)
     question_labels = q_texts
     correct_counts = [q_correct_counts[qid] for qid in q_ids]
     wrong_counts = [q_total_attempts[qid] - q_correct_counts[qid] for qid in q_ids]
 
-    # RESULT DISTRIBUTION
-    # bins: 100%, >=75% and <100, >=50% and <75, <50%
+    # Result distribution buckets
     cur.execute("SELECT score, total FROM results WHERE test_id = ?", (test_id,))
     score_rows = cur.fetchall()
     bins = {"100": 0, "75plus": 0, "50to75": 0, "below50": 0}
@@ -460,7 +525,36 @@ def trainer_results(test_id):
         else:
             bins["below50"] += 1
 
-    # prepare JSON data for template
+    # Fetch individual attempts with trainee info where possible
+    # Prefer joining trainees on trainee_id; fall back to trainee_emp_id stored in results.
+    # This query uses LEFT JOIN; if columns don't exist it will still work (SQLite will ignore missing columns)
+    try:
+        cur.execute("""
+            SELECT r.id, r.attempted_at, r.score, r.total,
+                   COALESCE(t.emp_id, r.trainee_emp_id) AS emp_id,
+                   COALESCE(t.name, r.trainee_name) AS trainee_name
+            FROM results r
+            LEFT JOIN trainees t ON r.trainee_id = t.id
+            WHERE r.test_id = ?
+            ORDER BY r.attempted_at DESC
+        """, (test_id,))
+        attempts = cur.fetchall()
+        attempts = [dict(a) for a in attempts]
+    except Exception:
+        # Fallback if schema is different: select basic fields and try to display whatever exists
+        cur.execute("SELECT id, attempted_at, score, total, raw_answers FROM results WHERE test_id = ? ORDER BY attempted_at DESC", (test_id,))
+        attempts = []
+        for r in cur.fetchall():
+            attempts.append({
+                "id": r["id"],
+                "attempted_at": r["attempted_at"],
+                "score": r["score"],
+                "total": r["total"],
+                "emp_id": None,
+                "trainee_name": None
+            })
+
+    # Prepare chart_data as before
     chart_data = {
         "participation": {
             "labels": ["Participants", "Non Participants"],
@@ -479,8 +573,7 @@ def trainer_results(test_id):
     }
 
     conn.close()
-    return render_template("trainer_results.html", chart_data=json.dumps(chart_data))
-
+    return render_template("trainer_results.html", chart_data=json.dumps(chart_data), attempts=attempts)
 
 
 # ---------------- Quiz flow for trainees: start, submit, results
@@ -490,6 +583,10 @@ def quiz_start(test_code):
     cur = conn.cursor()
     cur.execute("SELECT id, name, duration_minutes FROM tests WHERE test_code = ?", (test_code,))
     test = cur.fetchone()
+    trainee = session.get('trainee')
+    if not trainee:
+        flash("Please enter your Employee ID to continue.", "warning")
+        return redirect(url_for("exam_landing", test_code=test_code))
     if not test:
         flash("Test not found.", "danger")
         return redirect(url_for("login"))
@@ -570,6 +667,16 @@ def quiz_submit(test_code):
     """, (test_id, now, score, total, json.dumps(raw_answers)))
     conn.commit()
     session.pop("current_quiz", None)
+    trainee = session.get("trainee")
+    trainee_id = trainee["id"] if trainee else None
+    trainee_emp = trainee["emp_id"] if trainee else None
+    trainee_name = trainee["name"] if trainee else None
+
+    cur.execute("""
+    INSERT INTO results (test_id, attempted_at, score, total, raw_answers, trainee_id, trainee_emp_id, trainee_name)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+""", (test_id, now, score, total, json.dumps(raw_answers), trainee_id, trainee_emp, trainee_name))
+    conn.commit()
     return render_template("quiz_result.html", score=score, total=total, test_code=test_code)
 
 # ---------------- Admin utility: simple DB migration if tables missing

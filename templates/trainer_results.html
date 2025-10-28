@@ -174,6 +174,63 @@
             </div>
         </div>
     </div>
+    <!-- Trainee Attempts table -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card p-3 chart-card">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div>
+                        <h6 class="mb-0">Trainee Attempts</h6>
+                        <div class="small-muted">List of trainee attempts for this test (most recent first)</div>
+                    </div>
+                    <div>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse"
+                            data-bs-target="#attemptsTable" aria-expanded="true">Toggle</button>
+                    </div>
+                </div>
+
+                <div id="attemptsTable" class="collapse show">
+                    {% if attempts %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Employee ID</th>
+                                    <th>Trainee Name</th>
+                                    <th>Score</th>
+                                    <th>Percent</th>
+                                    <th>Attempted At</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for a in attempts %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td><code>{{ a.emp_id or '-' }}</code></td>
+                                    <td>{{ a.trainee_name or '-' }}</td>
+                                    <td>{{ a.score }} / {{ a.total }}</td>
+                                    <td>
+                                        {% if a.total and a.total > 0 %}
+                                        {{ ('%.1f' % ((a.score / a.total) * 100)) }}%
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-muted small">{{ a.attempted_at }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info mb-0">No attempts recorded yet for this test.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
@@ -288,6 +345,8 @@
                 }
             });
         })();
+
+
 
         // Export CSV: simple client-side builder for the summary + question stats
         document.getElementById('exportBtn').addEventListener('click', function () {
